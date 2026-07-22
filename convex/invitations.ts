@@ -21,6 +21,16 @@ function createToken(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(token),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 export const create = mutation({
   args: {
     householdId: v.id("households"),
@@ -55,11 +65,12 @@ export const create = mutation({
     }
 
     const token = createToken();
+    const tokenHash = await hashToken(token);
     const invitationId = await ctx.db.insert("householdInvitations", {
       householdId: args.householdId,
       emailNormalized,
       role: args.role,
-      token,
+      tokenHash,
       invitedByUserId: userId,
       expiresAt,
       status: "pending",
@@ -71,7 +82,7 @@ export const create = mutation({
 });
 
 export const listForHousehold = query({
-  args: { householdId: v.id("households") },
+  args: { householdId: v.id("households"), now: v.number() },
   returns: v.array(
     v.object({
       invitationId: v.id("householdInvitations"),
@@ -95,7 +106,7 @@ export const listForHousehold = query({
       invitationId: invitation._id,
       email: invitation.emailNormalized,
       role: invitation.role,
-      status: invitation.expiresAt <= Date.now() ? "expired" : invitation.status,
+      status: invitation.expiresAt <= args.now ? "expired" : invitation.status,
       expiresAt: invitation.expiresAt,
       createdAt: invitation.createdAt,
     }));
@@ -103,7 +114,7 @@ export const listForHousehold = query({
 });
 
 export const preview = query({
-  args: { token: v.string() },
+  args: { token: v.string(), now: v.number() },
   returns: v.union(
     v.null(),
     v.object({
@@ -117,9 +128,10 @@ export const preview = query({
     }),
   ),
   handler: async (ctx, args) => {
+    const tokenHash = await hashToken(args.token);
     const invitation = await ctx.db
       .query("householdInvitations")
-      .withIndex("by_token", (query) => query.eq("token", args.token))
+      .withIndex("by_token_hash", (query) => query.eq("tokenHash", tokenHash))
       .unique();
 
     if (!invitation) {
@@ -134,7 +146,7 @@ export const preview = query({
     const userId = await requireUserId(ctx);
     const user = await ctx.db.get(userId);
     const signedInEmail = user?.email?.trim().toLowerCase() ?? null;
-    const expired = invitation.expiresAt <= Date.now();
+    const expired = invitation.expiresAt <= args.now;
     const status = expired ? "expired" : invitation.status;
 
     return {
@@ -155,9 +167,10 @@ export const accept = mutation({
   returns: v.id("households"),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
+    const tokenHash = await hashToken(args.token);
     const invitation = await ctx.db
       .query("householdInvitations")
-      .withIndex("by_token", (query) => query.eq("token", args.token))
+      .withIndex("by_token_hash", (query) => query.eq("tokenHash", tokenHash))
       .unique();
 
     if (!invitation || invitation.status !== "pending") {
