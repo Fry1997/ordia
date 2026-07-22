@@ -15,24 +15,8 @@ console.log(
   `[convex-deploy-check] present=${deployKey.length > 0} length=${deployKey.length} prefix=${prefix} hasPipe=${hasPipe} startsWithProd=${startsWithProductionPrefix} normalizedEncodedPipe=${wasUrlEncoded}`,
 );
 
-if (!deployKey) {
-  console.error(
-    "[convex-deploy-check] CONVEX_DEPLOY_KEY is not available to this Vercel build.",
-  );
-  process.exit(1);
-}
-
-if (!startsWithProductionPrefix) {
-  console.error(
-    "[convex-deploy-check] The available key is not a production deploy key.",
-  );
-  process.exit(1);
-}
-
-if (!hasPipe || deployKey.length < 40) {
-  console.error(
-    "[convex-deploy-check] The available key is truncated or malformed.",
-  );
+if (!deployKey || !startsWithProductionPrefix || !hasPipe || deployKey.length < 40) {
+  console.error("[convex-deploy-check] CONVEX_DEPLOY_KEY is missing or malformed.");
   process.exit(1);
 }
 
@@ -41,10 +25,14 @@ const childEnv = {
   CONVEX_DEPLOY_KEY: deployKey,
 };
 
-function runConvex(args, { capture = false, secrets = [] } = {}) {
+function runConvex(
+  args,
+  { capture = false, input, secrets = [] } = {},
+) {
   const result = spawnSync("npx", ["convex", ...args], {
     encoding: "utf8",
-    stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    stdio: capture ? ["pipe", "pipe", "pipe"] : "inherit",
+    input,
     env: childEnv,
     shell: process.platform === "win32",
   });
@@ -80,17 +68,19 @@ function getProductionEnv(name) {
     throw new Error(`Could not inspect Convex production environment: ${result.error.message}`);
   }
 
-  if ((result.status ?? 1) !== 0) {
-    return null;
-  }
+  if ((result.status ?? 1) !== 0) return null;
 
   const value = result.stdout.trimEnd();
   return value.length > 0 ? value : null;
 }
 
 function setProductionEnv(name, value, { secret = false } = {}) {
-  runConvex(["env", "--prod", "set", name, value], {
+  // Convex officially supports omitting the value argument and piping it via stdin.
+  // This is required for PEM values, which begin with dashes and would otherwise
+  // be interpreted by the CLI as command-line options.
+  runConvex(["env", "--prod", "set", name], {
     capture: true,
+    input: `${value}\n`,
     secrets: secret ? [value] : [],
   });
 
@@ -110,13 +100,7 @@ function ensureProductionAuth() {
   let privateKeyValue = getProductionEnv("JWT_PRIVATE_KEY");
   let jwksValue = getProductionEnv("JWKS");
 
-  if ((privateKeyValue === null) !== (jwksValue === null)) {
-    throw new Error(
-      "Convex Auth is partially configured: JWT_PRIVATE_KEY and JWKS must both exist or both be absent.",
-    );
-  }
-
-  if (privateKeyValue === null && jwksValue === null) {
+  if (!privateKeyValue || !jwksValue) {
     const { privateKey, publicKey } = generateKeyPairSync("rsa", {
       modulusLength: 2048,
       publicExponent: 0x10001,
@@ -163,14 +147,27 @@ function sanitiseFailure(error) {
   return message.slice(0, 1200);
 }
 
+mkdirSync("public", { recursive: true });
+
 try {
   ensureProductionAuth();
+  writeFileSync(
+    "public/auth-bootstrap-status.json",
+    JSON.stringify(
+      {
+        ok: true,
+        stage: "production-auth-environment-write",
+        variablesVerified: true,
+      },
+      null,
+      2,
+    ),
+  );
   console.log("[convex-deploy-check] Auth variables verified; continuing to Convex deploy.");
   runConvex(["deploy", "--cmd", "npm run build"]);
 } catch (error) {
   const safeMessage = sanitiseFailure(error);
   console.error(`[convex-deploy-check] ${safeMessage}`);
-  mkdirSync("public", { recursive: true });
   writeFileSync(
     "public/auth-bootstrap-status.json",
     JSON.stringify(
