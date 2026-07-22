@@ -10,7 +10,11 @@ import { Brand } from "@/components/Brand";
 
 export function JoinHousehold({ token }: { token: string }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const preview = useQuery(api.invitations.preview, isAuthenticated ? { token } : "skip");
+  const [now] = useState(() => Date.now());
+  const preview = useQuery(
+    api.invitations.preview,
+    isAuthenticated ? { token, now } : "skip",
+  );
   const accept = useMutation(api.invitations.accept);
   const router = useRouter();
   const [accepting, setAccepting] = useState(false);
