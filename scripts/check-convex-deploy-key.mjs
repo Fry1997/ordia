@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 const rawValue = process.env.CONVEX_DEPLOY_KEY ?? "";
 const deployKey = rawValue.trim().replace(/%7C/gi, "|");
@@ -154,13 +155,34 @@ function ensureProductionAuth() {
   }
 }
 
+function sanitiseFailure(error) {
+  let message = error instanceof Error ? error.message : String(error);
+  message = message.split(deployKey).join("[deploy-key-redacted]");
+  message = message.replace(/prod:[^\s"']+/g, "[deploy-key-redacted]");
+  message = message.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[pem-redacted]");
+  return message.slice(0, 1200);
+}
+
 try {
   ensureProductionAuth();
   console.log("[convex-deploy-check] Auth variables verified; continuing to Convex deploy.");
   runConvex(["deploy", "--cmd", "npm run build"]);
 } catch (error) {
-  console.error(
-    `[convex-deploy-check] ${error instanceof Error ? error.message : String(error)}`,
+  const safeMessage = sanitiseFailure(error);
+  console.error(`[convex-deploy-check] ${safeMessage}`);
+  mkdirSync("public", { recursive: true });
+  writeFileSync(
+    "public/auth-bootstrap-status.json",
+    JSON.stringify(
+      {
+        ok: false,
+        stage: "production-auth-environment-write",
+        message: safeMessage,
+      },
+      null,
+      2,
+    ),
   );
-  process.exit(1);
+  console.log("[convex-deploy-check] Publishing sanitised bootstrap diagnostic.");
+  runConvex(["deploy", "--cmd", "npm run build"]);
 }
