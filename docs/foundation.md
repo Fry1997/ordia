@@ -17,6 +17,10 @@ The first build establishes the security and tenancy boundary before product mod
 - Invitations expire after seven days and can be revoked.
 - Acceptance requires the authenticated account email to match the invited email.
 
+## Deployment
+
+Production environment-variable changes must be validated through a fresh deployment from the `main` branch rather than by rebuilding an obsolete branch deployment.
+
 ## Next relational layers
 
 All shared domain records will include `householdId`. The next tables will cover people and relationships, structured knowledge, routines, responsibilities and key dates before practical modules such as meals and lists are introduced.
