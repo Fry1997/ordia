@@ -43,7 +43,7 @@ export default defineSchema({
     householdId: v.id("households"),
     emailNormalized: v.string(),
     role: invitationRole,
-    token: v.string(),
+    tokenHash: v.string(),
     invitedByUserId: v.id("users"),
     expiresAt: v.number(),
     status: v.union(
@@ -56,7 +56,7 @@ export default defineSchema({
     acceptedAt: v.optional(v.number()),
     acceptedByUserId: v.optional(v.id("users")),
   })
-    .index("by_token", ["token"])
+    .index("by_token_hash", ["tokenHash"])
     .index("by_household_id_and_status", ["householdId", "status"])
     .index("by_email_normalized_and_status", ["emailNormalized", "status"]),
 });
