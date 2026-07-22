@@ -136,82 +136,54 @@ function ensureProductionAuth() {
   }
 }
 
-function sanitiseFailure(error) {
-  let message = error instanceof Error ? error.message : String(error);
-  message = message.split(deployKey).join("[deploy-key-redacted]");
-  message = message.replace(/prod:[^\s"']+/g, "[deploy-key-redacted]");
-  message = message.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[pem-redacted]");
-  return message.slice(0, 1600);
-}
-
 mkdirSync("public", { recursive: true });
+ensureProductionAuth();
 
-try {
-  ensureProductionAuth();
+console.log("[account-cleanup] Deploying and verifying the one-time cleanup function.");
+runConvex(["deploy"]);
 
-  console.log("[account-cleanup] Deploying the one-time cleanup function.");
-  runConvex(["deploy"]);
+const cleanupArgs = JSON.stringify({
+  targetEmail: "cjfry97@gmail.com",
+  confirmation: "Delete the incomplete Ordia account for cjfry97@gmail.com.",
+});
+const cleanupOutput = runConvex(
+  [
+    "run",
+    "accountCleanup:deleteIncompleteAccount",
+    cleanupArgs,
+    "--prod",
+  ],
+  { capture: true },
+);
 
-  const cleanupArgs = JSON.stringify({
-    targetEmail: "cjfry97@gmail.com",
-    confirmation: "Delete the incomplete Ordia account for cjfry97@gmail.com.",
-  });
-  const cleanupOutput = runConvex(
-    [
-      "run",
-      "accountCleanup:deleteIncompleteAccount",
-      cleanupArgs,
-      "--prod",
-    ],
-    { capture: true },
-  );
-
-  if (!cleanupOutput.includes("ok") || !cleanupOutput.includes("true")) {
-    throw new Error(`Account cleanup did not confirm success: ${cleanupOutput}`);
-  }
-
-  writeFileSync(
-    "public/account-cleanup-status.json",
-    JSON.stringify(
-      {
-        ok: true,
-        stage: "incomplete-account-cleanup",
-        result: cleanupOutput,
-      },
-      null,
-      2,
-    ),
-  );
-  writeFileSync(
-    "public/auth-bootstrap-status.json",
-    JSON.stringify(
-      {
-        ok: true,
-        stage: "production-auth-environment-write",
-        variablesVerified: true,
-      },
-      null,
-      2,
-    ),
-  );
-
-  console.log("[account-cleanup] Cleanup completed; building the site with verification status.");
-  runConvex(["deploy", "--cmd", "npm run build"]);
-} catch (error) {
-  const safeMessage = sanitiseFailure(error);
-  console.error(`[convex-deploy-check] ${safeMessage}`);
-  writeFileSync(
-    "public/account-cleanup-status.json",
-    JSON.stringify(
-      {
-        ok: false,
-        stage: "incomplete-account-cleanup",
-        message: safeMessage,
-      },
-      null,
-      2,
-    ),
-  );
-  console.log("[convex-deploy-check] Publishing sanitised cleanup diagnostic.");
-  runConvex(["deploy", "--cmd", "npm run build"]);
+if (!/["']?ok["']?\s*:\s*true/.test(cleanupOutput)) {
+  throw new Error("Account cleanup did not return a verified successful result.");
 }
+
+writeFileSync(
+  "public/account-cleanup-status.json",
+  JSON.stringify(
+    {
+      ok: true,
+      stage: "incomplete-account-cleanup",
+      result: cleanupOutput,
+    },
+    null,
+    2,
+  ),
+);
+writeFileSync(
+  "public/auth-bootstrap-status.json",
+  JSON.stringify(
+    {
+      ok: true,
+      stage: "production-auth-environment-write",
+      variablesVerified: true,
+    },
+    null,
+    2,
+  ),
+);
+
+console.log("[account-cleanup] Account absence verified; building Ordia.");
+runConvex(["deploy", "--cmd", "npm run build"]);
