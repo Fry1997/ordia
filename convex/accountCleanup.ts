@@ -1,10 +1,24 @@
-import { internalMutation } from "./_generated/server";
+import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import { mutation } from "./_generated/server";
 
 const TARGET_EMAIL = "cjfry97@gmail.com";
+const REQUIRED_CONFIRMATION =
+  "Delete the incomplete Ordia account for cjfry97@gmail.com.";
 
-export const deleteIncompleteAccount = internalMutation({
-  args: {},
-  handler: async (ctx) => {
+export const deleteIncompleteAccount = mutation({
+  args: {
+    targetEmail: v.string(),
+    confirmation: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (
+      args.targetEmail.trim().toLowerCase() !== TARGET_EMAIL ||
+      args.confirmation !== REQUIRED_CONFIRMATION
+    ) {
+      throw new Error("Account cleanup confirmation did not match.");
+    }
+
     const passwordAccounts = await ctx.db
       .query("authAccounts")
       .withIndex("providerAndAccountId", (query) =>
@@ -17,7 +31,7 @@ export const deleteIncompleteAccount = internalMutation({
       .withIndex("email", (query) => query.eq("email", TARGET_EMAIL))
       .collect();
 
-    const userIds = new Set<string>([
+    const userIds = new Set<Id<"users">>([
       ...passwordAccounts.map((account) => account.userId),
       ...usersByEmail.map((user) => user._id),
     ]);
@@ -35,32 +49,33 @@ export const deleteIncompleteAccount = internalMutation({
         status: "not-found",
         email: TARGET_EMAIL,
         deleted: { rateLimits: matchingRateLimits.length },
+        remaining: { users: 0, passwordAccounts: 0 },
       };
     }
 
     const ids = [...userIds];
-    const profiles = [];
-    const memberships = [];
-    const households = [];
+    const profiles: Doc<"profiles">[] = [];
+    const memberships: Doc<"householdMemberships">[] = [];
+    const households: Doc<"households">[] = [];
 
     for (const userId of ids) {
       profiles.push(
         ...(await ctx.db
           .query("profiles")
-          .withIndex("by_user_id", (query) => query.eq("userId", userId as never))
+          .withIndex("by_user_id", (query) => query.eq("userId", userId))
           .collect()),
       );
       memberships.push(
         ...(await ctx.db
           .query("householdMemberships")
-          .withIndex("by_user_id", (query) => query.eq("userId", userId as never))
+          .withIndex("by_user_id", (query) => query.eq("userId", userId))
           .collect()),
       );
       households.push(
         ...(await ctx.db
           .query("households")
           .withIndex("by_created_by_user_id", (query) =>
-            query.eq("createdByUserId", userId as never),
+            query.eq("createdByUserId", userId),
           )
           .collect()),
       );
@@ -72,21 +87,21 @@ export const deleteIncompleteAccount = internalMutation({
       );
     }
 
-    const accounts = [];
-    const sessions = [];
+    const accounts: Doc<"authAccounts">[] = [];
+    const sessions: Doc<"authSessions">[] = [];
     for (const userId of ids) {
       accounts.push(
         ...(await ctx.db
           .query("authAccounts")
           .withIndex("userIdAndProvider", (query) =>
-            query.eq("userId", userId as never),
+            query.eq("userId", userId),
           )
           .collect()),
       );
       sessions.push(
         ...(await ctx.db
           .query("authSessions")
-          .withIndex("userId", (query) => query.eq("userId", userId as never))
+          .withIndex("userId", (query) => query.eq("userId", userId))
           .collect()),
       );
     }
@@ -115,7 +130,9 @@ export const deleteIncompleteAccount = internalMutation({
       }
     }
 
-    const sessionIds = new Set(sessions.map((session) => session._id));
+    const sessionIds = new Set<Id<"authSessions">>(
+      sessions.map((session) => session._id),
+    );
     const verifiers = await ctx.db.query("authVerifiers").collect();
     const matchingVerifiers = verifiers.filter(
       (verifier) => verifier.sessionId && sessionIds.has(verifier.sessionId),
@@ -133,9 +150,8 @@ export const deleteIncompleteAccount = internalMutation({
     for (const profile of profiles) {
       await ctx.db.delete(profile._id);
     }
-
     for (const userId of ids) {
-      await ctx.db.delete(userId as never);
+      await ctx.db.delete(userId);
     }
 
     const rateLimits = await ctx.db.query("authRateLimits").collect();
