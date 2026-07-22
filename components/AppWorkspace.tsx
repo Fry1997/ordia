@@ -277,9 +277,10 @@ function HouseholdOverview({
   role: "owner" | "admin" | "member";
 }) {
   const members = useQuery(api.households.listMembers, { householdId });
+  const [now] = useState(() => Date.now());
   const invitations = useQuery(
     api.invitations.listForHousehold,
-    role === "owner" || role === "admin" ? { householdId } : "skip",
+    role === "owner" || role === "admin" ? { householdId, now } : "skip",
   );
   const createInvitation = useMutation(api.invitations.create);
   const revokeInvitation = useMutation(api.invitations.revoke);
