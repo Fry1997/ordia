@@ -79,7 +79,12 @@ function getProductionEnv(name) {
     throw new Error(`Could not inspect Convex production environment: ${result.error.message}`);
   }
 
-  return (result.status ?? 1) === 0 ? result.stdout.trimEnd() : null;
+  if ((result.status ?? 1) !== 0) {
+    return null;
+  }
+
+  const value = result.stdout.trimEnd();
+  return value.length > 0 ? value : null;
 }
 
 function setProductionEnv(name, value, { secret = false } = {}) {
