@@ -1,6 +1,9 @@
 node_modules
 .next
-.env*.local
-.convex
-.DS_Store
+out
+.env
+.env.local
+.env.*.local
+.vercel
 *.log
+.DS_Store
