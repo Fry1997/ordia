@@ -75,9 +75,6 @@ function getProductionEnv(name) {
 }
 
 function setProductionEnv(name, value, { secret = false } = {}) {
-  // Convex officially supports omitting the value argument and piping it via stdin.
-  // This is required for PEM values, which begin with dashes and would otherwise
-  // be interpreted by the CLI as command-line options.
   runConvex(["env", "--prod", "set", name], {
     capture: true,
     input: `${value}\n`,
@@ -144,13 +141,47 @@ function sanitiseFailure(error) {
   message = message.split(deployKey).join("[deploy-key-redacted]");
   message = message.replace(/prod:[^\s"']+/g, "[deploy-key-redacted]");
   message = message.replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[pem-redacted]");
-  return message.slice(0, 1200);
+  return message.slice(0, 1600);
 }
 
 mkdirSync("public", { recursive: true });
 
 try {
   ensureProductionAuth();
+
+  console.log("[account-cleanup] Deploying the one-time cleanup function.");
+  runConvex(["deploy"]);
+
+  const cleanupArgs = JSON.stringify({
+    targetEmail: "cjfry97@gmail.com",
+    confirmation: "Delete the incomplete Ordia account for cjfry97@gmail.com.",
+  });
+  const cleanupOutput = runConvex(
+    [
+      "run",
+      "accountCleanup:deleteIncompleteAccount",
+      cleanupArgs,
+      "--prod",
+    ],
+    { capture: true },
+  );
+
+  if (!cleanupOutput.includes("ok") || !cleanupOutput.includes("true")) {
+    throw new Error(`Account cleanup did not confirm success: ${cleanupOutput}`);
+  }
+
+  writeFileSync(
+    "public/account-cleanup-status.json",
+    JSON.stringify(
+      {
+        ok: true,
+        stage: "incomplete-account-cleanup",
+        result: cleanupOutput,
+      },
+      null,
+      2,
+    ),
+  );
   writeFileSync(
     "public/auth-bootstrap-status.json",
     JSON.stringify(
@@ -163,23 +194,24 @@ try {
       2,
     ),
   );
-  console.log("[convex-deploy-check] Auth variables verified; continuing to Convex deploy.");
+
+  console.log("[account-cleanup] Cleanup completed; building the site with verification status.");
   runConvex(["deploy", "--cmd", "npm run build"]);
 } catch (error) {
   const safeMessage = sanitiseFailure(error);
   console.error(`[convex-deploy-check] ${safeMessage}`);
   writeFileSync(
-    "public/auth-bootstrap-status.json",
+    "public/account-cleanup-status.json",
     JSON.stringify(
       {
         ok: false,
-        stage: "production-auth-environment-write",
+        stage: "incomplete-account-cleanup",
         message: safeMessage,
       },
       null,
       2,
     ),
   );
-  console.log("[convex-deploy-check] Publishing sanitised bootstrap diagnostic.");
+  console.log("[convex-deploy-check] Publishing sanitised cleanup diagnostic.");
   runConvex(["deploy", "--cmd", "npm run build"]);
 }
