@@ -1,6 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { generateKeyPairSync } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
 
 const rawValue = process.env.CONVEX_DEPLOY_KEY ?? "";
 const deployKey = rawValue.trim().replace(/%7C/gi, "|");
@@ -15,175 +13,45 @@ console.log(
   `[convex-deploy-check] present=${deployKey.length > 0} length=${deployKey.length} prefix=${prefix} hasPipe=${hasPipe} startsWithProd=${startsWithProductionPrefix} normalizedEncodedPipe=${wasUrlEncoded}`,
 );
 
-if (!deployKey || !startsWithProductionPrefix || !hasPipe || deployKey.length < 40) {
-  console.error("[convex-deploy-check] CONVEX_DEPLOY_KEY is missing or malformed.");
+if (!deployKey) {
+  console.error(
+    "[convex-deploy-check] CONVEX_DEPLOY_KEY is not available to this Vercel build.",
+  );
   process.exit(1);
 }
 
-const childEnv = {
-  ...process.env,
-  CONVEX_DEPLOY_KEY: deployKey,
-};
+if (!startsWithProductionPrefix) {
+  console.error(
+    "[convex-deploy-check] The available key is not a production deploy key.",
+  );
+  process.exit(1);
+}
 
-function runConvex(
-  args,
-  { capture = false, input, secrets = [] } = {},
-) {
-  const result = spawnSync("npx", ["convex", ...args], {
-    encoding: "utf8",
-    stdio: capture ? ["pipe", "pipe", "pipe"] : "inherit",
-    input,
-    env: childEnv,
+if (!hasPipe || deployKey.length < 40) {
+  console.error(
+    "[convex-deploy-check] The available key is truncated or malformed.",
+  );
+  process.exit(1);
+}
+
+const result = spawnSync(
+  "npx",
+  ["convex", "deploy", "--cmd", "npm run build"],
+  {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      CONVEX_DEPLOY_KEY: deployKey,
+    },
     shell: process.platform === "win32",
-  });
+  },
+);
 
-  if (result.error) {
-    throw new Error(`Could not start Convex CLI: ${result.error.message}`);
-  }
-
-  if ((result.status ?? 1) !== 0) {
-    let detail = `${result.stderr ?? ""}${result.stdout ?? ""}`.trim();
-    for (const secret of secrets) {
-      if (secret) detail = detail.split(secret).join("[redacted]");
-    }
-    throw new Error(detail || `Convex CLI exited with status ${result.status ?? 1}.`);
-  }
-
-  return result.stdout?.trimEnd() ?? "";
-}
-
-function getProductionEnv(name) {
-  const result = spawnSync(
-    "npx",
-    ["convex", "env", "--prod", "get", name],
-    {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: childEnv,
-      shell: process.platform === "win32",
-    },
+if (result.error) {
+  console.error(
+    `[convex-deploy-check] Could not start Convex CLI: ${result.error.message}`,
   );
-
-  if (result.error) {
-    throw new Error(`Could not inspect Convex production environment: ${result.error.message}`);
-  }
-
-  if ((result.status ?? 1) !== 0) return null;
-
-  const value = result.stdout.trimEnd();
-  return value.length > 0 ? value : null;
+  process.exit(1);
 }
 
-function setProductionEnv(name, value, { secret = false } = {}) {
-  runConvex(["env", "--prod", "set", name], {
-    capture: true,
-    input: `${value}\n`,
-    secrets: secret ? [value] : [],
-  });
-
-  const stored = getProductionEnv(name);
-  if (stored !== value) {
-    throw new Error(`${name} was not persisted to the production deployment.`);
-  }
-
-  console.log(
-    `[convex-auth-bootstrap] ${name} ${secret ? "securely " : ""}stored and verified in production.`,
-  );
-}
-
-function ensureProductionAuth() {
-  console.log("[convex-auth-bootstrap] Verifying production authentication variables.");
-
-  let privateKeyValue = getProductionEnv("JWT_PRIVATE_KEY");
-  let jwksValue = getProductionEnv("JWKS");
-
-  if (!privateKeyValue || !jwksValue) {
-    const { privateKey, publicKey } = generateKeyPairSync("rsa", {
-      modulusLength: 2048,
-      publicExponent: 0x10001,
-    });
-
-    privateKeyValue = privateKey
-      .export({ type: "pkcs8", format: "pem" })
-      .toString()
-      .trimEnd()
-      .replace(/\n/g, " ");
-
-    const publicJwk = publicKey.export({ format: "jwk" });
-    jwksValue = JSON.stringify({
-      keys: [{ use: "sig", ...publicJwk }],
-    });
-
-    setProductionEnv("JWT_PRIVATE_KEY", privateKeyValue, { secret: true });
-    setProductionEnv("JWKS", jwksValue, { secret: true });
-  } else {
-    console.log("[convex-auth-bootstrap] Existing signing pair retained.");
-  }
-
-  const siteUrl = "https://ordia-nine.vercel.app";
-  if (getProductionEnv("SITE_URL") !== siteUrl) {
-    setProductionEnv("SITE_URL", siteUrl);
-  } else {
-    console.log("[convex-auth-bootstrap] SITE_URL is already correct.");
-  }
-
-  if (
-    !getProductionEnv("JWT_PRIVATE_KEY") ||
-    !getProductionEnv("JWKS") ||
-    getProductionEnv("SITE_URL") !== siteUrl
-  ) {
-    throw new Error("Production authentication variables failed final verification.");
-  }
-}
-
-mkdirSync("public", { recursive: true });
-ensureProductionAuth();
-
-console.log("[account-cleanup] Deploying and verifying the one-time cleanup function.");
-runConvex(["deploy"]);
-
-const cleanupArgs = JSON.stringify({
-  targetEmail: "cjfry97@gmail.com",
-  confirmation: "Delete the incomplete Ordia account for cjfry97@gmail.com.",
-});
-const cleanupOutput = runConvex(
-  [
-    "run",
-    "accountCleanup:deleteIncompleteAccount",
-    cleanupArgs,
-    "--prod",
-  ],
-  { capture: true },
-);
-
-if (!/["']?ok["']?\s*:\s*true/.test(cleanupOutput)) {
-  throw new Error("Account cleanup did not return a verified successful result.");
-}
-
-writeFileSync(
-  "public/account-cleanup-status.json",
-  JSON.stringify(
-    {
-      ok: true,
-      stage: "incomplete-account-cleanup",
-      result: cleanupOutput,
-    },
-    null,
-    2,
-  ),
-);
-writeFileSync(
-  "public/auth-bootstrap-status.json",
-  JSON.stringify(
-    {
-      ok: true,
-      stage: "production-auth-environment-write",
-      variablesVerified: true,
-    },
-    null,
-    2,
-  ),
-);
-
-console.log("[account-cleanup] Account absence verified; building Ordia.");
-runConvex(["deploy", "--cmd", "npm run build"]);
+process.exit(result.status ?? 1);
