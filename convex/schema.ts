@@ -10,6 +10,14 @@ const membershipRole = v.union(
 
 const invitationRole = v.union(v.literal("admin"), v.literal("member"));
 
+const mentalLoadKind = v.union(
+  v.literal("task"),
+  v.literal("remember"),
+  v.literal("decision"),
+  v.literal("buy"),
+  v.literal("arrange"),
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -59,4 +67,19 @@ export default defineSchema({
     .index("by_token_hash", ["tokenHash"])
     .index("by_household_id_and_status", ["householdId", "status"])
     .index("by_email_normalized_and_status", ["emailNormalized", "status"]),
+
+  mentalLoadItems: defineTable({
+    householdId: v.id("households"),
+    title: v.string(),
+    kind: mentalLoadKind,
+    status: v.union(v.literal("open"), v.literal("done")),
+    ownerUserId: v.id("users"),
+    createdByUserId: v.id("users"),
+    dueAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_status", ["householdId", "status"]),
 });
