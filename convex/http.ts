@@ -1,4 +1,5 @@
 import { httpRouter } from "convex/server";
+import { api } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 
@@ -18,7 +19,14 @@ function decodePemBody(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-const authDiagnostic = httpAction(async () => {
+function safeError(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail
+    .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[pem-redacted]")
+    .slice(0, 2000);
+}
+
+const authDiagnostic = httpAction(async (ctx) => {
   const privateKey = process.env.JWT_PRIVATE_KEY ?? "";
   const jwksRaw = process.env.JWKS ?? "";
   const siteUrl = process.env.SITE_URL ?? null;
@@ -69,7 +77,53 @@ const authDiagnostic = httpAction(async () => {
       payload,
     );
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    errors.push(safeError(error));
+  }
+
+  const smokeEmail = "ordia-auth-smoke@ordia.invalid";
+  const smokePassword = "Ordia-Smoke-Account-2026!";
+  let authSmokeTest:
+    | { ok: true; completedFlow: "signUp" | "signIn"; tokensReturned: boolean }
+    | { ok: false; signUpError: string; signInError: string };
+
+  try {
+    const result = await ctx.runAction(api.auth.signIn, {
+      provider: "password",
+      params: {
+        email: smokeEmail,
+        password: smokePassword,
+        flow: "signUp",
+      },
+      calledBy: "production-auth-diagnostic",
+    });
+    authSmokeTest = {
+      ok: true,
+      completedFlow: "signUp",
+      tokensReturned: Boolean(result.tokens),
+    };
+  } catch (signUpError) {
+    try {
+      const result = await ctx.runAction(api.auth.signIn, {
+        provider: "password",
+        params: {
+          email: smokeEmail,
+          password: smokePassword,
+          flow: "signIn",
+        },
+        calledBy: "production-auth-diagnostic-recovery",
+      });
+      authSmokeTest = {
+        ok: true,
+        completedFlow: "signIn",
+        tokensReturned: Boolean(result.tokens),
+      };
+    } catch (signInError) {
+      authSmokeTest = {
+        ok: false,
+        signUpError: safeError(signUpError),
+        signInError: safeError(signInError),
+      };
+    }
   }
 
   return new Response(
@@ -88,6 +142,7 @@ const authDiagnostic = httpAction(async () => {
         siteUrl,
         convexSiteUrl,
         errors,
+        authSmokeTest,
       },
       null,
       2,
