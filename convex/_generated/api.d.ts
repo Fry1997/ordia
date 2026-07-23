@@ -18,6 +18,7 @@ import type * as households from "../households.js";
 import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
 import type * as mentalLoad from "../mentalLoad.js";
+import type * as ordia from "../ordia.js";
 import type * as profiles from "../profiles.js";
 
 /**
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   invitations: typeof invitations;
   mentalLoad: typeof mentalLoad;
+  ordia: typeof ordia;
   profiles: typeof profiles;
 }>;
 
