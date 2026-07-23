@@ -18,6 +18,36 @@ const mentalLoadKind = v.union(
   v.literal("arrange"),
 );
 
+const visibility = v.union(v.literal("private"), v.literal("household"));
+const responsibilityStatus = v.union(v.literal("active"), v.literal("paused"));
+const taskStatus = v.union(v.literal("open"), v.literal("done"));
+const routineStatus = v.union(v.literal("active"), v.literal("paused"));
+const knowledgeKind = v.union(
+  v.literal("place"),
+  v.literal("thing"),
+  v.literal("meal"),
+  v.literal("restaurant"),
+  v.literal("takeaway"),
+  v.literal("snack"),
+  v.literal("activity"),
+  v.literal("drink"),
+  v.literal("ingredient"),
+  v.literal("product"),
+  v.literal("service"),
+  v.literal("fact"),
+  v.literal("decision"),
+  v.literal("note"),
+);
+const preferenceKind = v.union(
+  v.literal("favourite"),
+  v.literal("likes"),
+  v.literal("usually"),
+  v.literal("dislikes"),
+  v.literal("avoids"),
+  v.literal("needs"),
+  v.literal("only_if"),
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -72,7 +102,7 @@ export default defineSchema({
     householdId: v.id("households"),
     title: v.string(),
     kind: mentalLoadKind,
-    status: v.union(v.literal("open"), v.literal("done")),
+    status: taskStatus,
     ownerUserId: v.id("users"),
     createdByUserId: v.id("users"),
     dueAt: v.optional(v.number()),
@@ -82,4 +112,115 @@ export default defineSchema({
   })
     .index("by_household_id", ["householdId"])
     .index("by_household_id_and_status", ["householdId", "status"]),
+
+  householdPeople: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    relationship: v.optional(v.string()),
+    birthDate: v.optional(v.string()),
+    note: v.optional(v.string()),
+    visibility,
+    linkedUserId: v.optional(v.id("users")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_linked_user_id", ["linkedUserId"]),
+
+  responsibilities: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    status: responsibilityStatus,
+    ownerPersonId: v.optional(v.id("householdPeople")),
+    nextDueAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_status", ["householdId", "status"]),
+
+  routines: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    scheduleText: v.string(),
+    steps: v.array(v.string()),
+    status: routineStatus,
+    responsibilityId: v.optional(v.id("responsibilities")),
+    personId: v.optional(v.id("householdPeople")),
+    nextDueAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_responsibility_id", ["responsibilityId"])
+    .index("by_person_id", ["personId"]),
+
+  tasks: defineTable({
+    householdId: v.id("households"),
+    title: v.string(),
+    notes: v.optional(v.string()),
+    status: taskStatus,
+    dueAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    responsibilityId: v.optional(v.id("responsibilities")),
+    routineId: v.optional(v.id("routines")),
+    personId: v.optional(v.id("householdPeople")),
+    ownerPersonId: v.optional(v.id("householdPeople")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_status", ["householdId", "status"])
+    .index("by_responsibility_id", ["responsibilityId"])
+    .index("by_routine_id", ["routineId"])
+    .index("by_person_id", ["personId"]),
+
+  knowledgeItems: defineTable({
+    householdId: v.id("households"),
+    kind: knowledgeKind,
+    name: v.string(),
+    detail: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_kind", ["householdId", "kind"]),
+
+  preferences: defineTable({
+    householdId: v.id("households"),
+    personId: v.optional(v.id("householdPeople")),
+    subjectItemId: v.optional(v.id("knowledgeItems")),
+    subjectName: v.string(),
+    kind: preferenceKind,
+    detail: v.optional(v.string()),
+    visibility,
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_person_id", ["personId"])
+    .index("by_subject_item_id", ["subjectItemId"]),
+
+  playbooks: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    notes: v.optional(v.string()),
+    steps: v.array(v.string()),
+    linkedItemId: v.optional(v.id("knowledgeItems")),
+    responsibilityId: v.optional(v.id("responsibilities")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_linked_item_id", ["linkedItemId"])
+    .index("by_responsibility_id", ["responsibilityId"]),
 });
