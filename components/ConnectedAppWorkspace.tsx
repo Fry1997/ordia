@@ -8,12 +8,12 @@ import {
   useMutation,
   useQuery,
 } from "convex/react";
-import { ChevronDown, Home, LoaderCircle, LogOut, Plus } from "lucide-react";
+import { Home, LoaderCircle, LogOut, Plus } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { Brand } from "@/components/Brand";
-import { ConnectedWorkspace } from "@/components/ConnectedWorkspace";
+import { DomainWorkspace } from "@/components/domain/DomainWorkspace";
 
 export function ConnectedAppWorkspace() {
   return (
@@ -43,8 +43,7 @@ function WorkspaceContent() {
   const households = useQuery(api.households.listMine, {});
   const createHousehold = useMutation(api.households.create);
   const { signOut } = useAuthActions();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
+  const [selectedId] = useState<string | null>(null);
 
   const selectedHousehold = useMemo(() => {
     if (!households?.length) return null;
@@ -75,59 +74,12 @@ function WorkspaceContent() {
   }
 
   return (
-    <main className="app-shell connected-app-shell">
-      <header className="app-header connected-app-header">
-        <Brand />
-        <div className="connected-header-actions">
-          {households.length > 1 && (
-            <label className="household-switcher compact-switcher">
-              <span>Household</span>
-              <div>
-                <select
-                  value={selectedHousehold.householdId}
-                  onChange={(event) => setSelectedId(event.target.value)}
-                >
-                  {households.map((household) => (
-                    <option key={household.householdId} value={household.householdId}>
-                      {household.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} />
-              </div>
-            </label>
-          )}
-          <button
-            className="icon-button"
-            type="button"
-            onClick={() => setShowCreate((value) => !value)}
-          >
-            <Plus size={18} />
-            <span className="desktop-only">New household</span>
-          </button>
-          <button className="icon-button" type="button" onClick={() => void signOut()}>
-            <LogOut size={18} />
-            <span className="desktop-only">Sign out</span>
-          </button>
-        </div>
-      </header>
-
-      {showCreate && (
-        <InlineHouseholdCreator
-          initialDisplayName={viewer?.displayName ?? ""}
-          onCancel={() => setShowCreate(false)}
-          onCreate={async (displayName, householdName) => {
-            const householdId = await createHousehold({ displayName, householdName });
-            setSelectedId(householdId);
-            setShowCreate(false);
-          }}
-        />
-      )}
-
-      <ConnectedWorkspace
+    <main className="domain-app-root">
+      <DomainWorkspace
         householdId={selectedHousehold.householdId}
         householdName={selectedHousehold.name}
         role={selectedHousehold.role}
+        onSignOut={() => void signOut()}
       />
     </main>
   );
@@ -156,7 +108,11 @@ function HouseholdOnboarding({
         String(formData.get("householdName") ?? ""),
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the household.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not create the household.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -171,20 +127,45 @@ function HouseholdOnboarding({
         </button>
       </header>
       <section className="onboarding-card connected-onboarding-card">
-        <div className="onboarding-symbol" aria-hidden="true"><Home size={28} /></div>
-        <span className="section-kicker">Create your household map</span>
-        <h1>Give household knowledge somewhere to live.</h1>
+        <div className="onboarding-symbol" aria-hidden="true">
+          <Home size={28} />
+        </div>
+        <span className="section-kicker">Create your household system</span>
+        <h1>Give household knowledge somewhere structured to live.</h1>
         <p>
-          Use Ordia alone or together. A household connects responsibilities, routines,
-          people, preferences, places and practical know-how without requiring anyone
-          else to join the app.
+          Use Ordia alone or together. A household connects responsibilities,
+          routines, people, preferences and practical know-how without requiring
+          anyone else to join the app.
         </p>
         <form className="form-stack" onSubmit={submit}>
-          <label><span>Your name</span><input name="displayName" defaultValue={initialDisplayName} placeholder="Connor" required /></label>
-          <label><span>Household name</span><input name="householdName" placeholder="The Fry household" required /></label>
+          <label>
+            <span>Your name</span>
+            <input
+              name="displayName"
+              defaultValue={initialDisplayName}
+              placeholder="Connor"
+              required
+            />
+          </label>
+          <label>
+            <span>Household name</span>
+            <input
+              name="householdName"
+              placeholder="The Fry household"
+              required
+            />
+          </label>
           {error && <div className="form-error">{error}</div>}
-          <button className="primary-button full-width" disabled={submitting} type="submit">
-            {submitting ? <LoaderCircle className="spin" size={18} /> : <Plus size={18} />}
+          <button
+            className="primary-button full-width"
+            disabled={submitting}
+            type="submit"
+          >
+            {submitting ? (
+              <LoaderCircle className="spin" size={18} />
+            ) : (
+              <Plus size={18} />
+            )}
             Create household
           </button>
         </form>
@@ -193,43 +174,11 @@ function HouseholdOnboarding({
   );
 }
 
-function InlineHouseholdCreator({
-  initialDisplayName,
-  onCreate,
-  onCancel,
-}: {
-  initialDisplayName: string;
-  onCreate: (displayName: string, householdName: string) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [submitting, setSubmitting] = useState(false);
-  return (
-    <form
-      className="inline-create-panel"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const formData = new FormData(event.currentTarget);
-        setSubmitting(true);
-        try {
-          await onCreate(
-            String(formData.get("displayName") ?? ""),
-            String(formData.get("householdName") ?? ""),
-          );
-        } finally {
-          setSubmitting(false);
-        }
-      }}
-    >
-      <input name="displayName" type="hidden" value={initialDisplayName} />
-      <label><span>New household name</span><input name="householdName" placeholder="Another organising space" required /></label>
-      <div className="button-row">
-        <button className="secondary-button" type="button" onClick={onCancel}>Cancel</button>
-        <button className="primary-button" disabled={submitting} type="submit">{submitting ? <LoaderCircle className="spin" size={18} /> : <Plus size={18} />}Create</button>
-      </div>
-    </form>
-  );
-}
-
 function FullPageLoading({ label }: { label: string }) {
-  return <main className="centered-state"><LoaderCircle className="spin" size={30} /><p>{label}</p></main>;
+  return (
+    <main className="centered-state">
+      <LoaderCircle className="spin" size={30} />
+      <p>{label}</p>
+    </main>
+  );
 }

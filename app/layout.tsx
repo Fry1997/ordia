@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import "./globals.css";
 import "./workspace.css";
+import "./domain.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,9 +18,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ordia — shared life, understood",
+  title: "Ordia — household knowledge, connected",
   description:
-    "Shared household context, ownership and routines without one person carrying all the remembering.",
+    "Responsibilities, routines, people, preferences and practical household knowledge connected in one usable system.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

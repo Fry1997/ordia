@@ -1,5 +1,32 @@
 import { spawnSync } from "node:child_process";
 
+const isPreview = process.env.VERCEL_ENV === "preview";
+
+if (isPreview) {
+  console.log(
+    "[convex-deploy-check] Preview build detected; compiling without deploying Convex functions.",
+  );
+  const result = spawnSync("npm", ["run", "build"], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_CONVEX_URL:
+        process.env.NEXT_PUBLIC_CONVEX_URL ??
+        "https://ordia-build-placeholder.convex.cloud",
+    },
+    shell: process.platform === "win32",
+  });
+
+  if (result.error) {
+    console.error(
+      `[convex-deploy-check] Could not start preview build: ${result.error.message}`,
+    );
+    process.exit(1);
+  }
+
+  process.exit(result.status ?? 1);
+}
+
 const rawValue = process.env.CONVEX_DEPLOY_KEY ?? "";
 const deployKey = rawValue.trim().replace(/%7C/gi, "|");
 const prefix = deployKey.includes(":")
@@ -15,7 +42,7 @@ console.log(
 
 if (!deployKey) {
   console.error(
-    "[convex-deploy-check] CONVEX_DEPLOY_KEY is not available to this Vercel build.",
+    "[convex-deploy-check] CONVEX_DEPLOY_KEY is not available to this production build.",
   );
   process.exit(1);
 }
