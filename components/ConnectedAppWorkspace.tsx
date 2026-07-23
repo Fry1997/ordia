@@ -43,7 +43,7 @@ function WorkspaceContent() {
   const households = useQuery(api.households.listMine, {});
   const createHousehold = useMutation(api.households.create);
   const { signOut } = useAuthActions();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId] = useState<string | null>(null);
 
   const selectedHousehold = useMemo(() => {
     if (!households?.length) return null;
@@ -79,11 +79,6 @@ function WorkspaceContent() {
         householdId={selectedHousehold.householdId}
         householdName={selectedHousehold.name}
         role={selectedHousehold.role}
-        households={households.map((household) => ({
-          householdId: household.householdId,
-          name: household.name,
-        }))}
-        onSelectHousehold={(householdId) => setSelectedId(householdId)}
         onSignOut={() => void signOut()}
       />
     </main>
