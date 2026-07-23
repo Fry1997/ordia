@@ -48,6 +48,113 @@ const preferenceKind = v.union(
   v.literal("only_if"),
 );
 
+const personRelationship = v.union(
+  v.literal("self"),
+  v.literal("partner"),
+  v.literal("child"),
+  v.literal("parent"),
+  v.literal("sibling"),
+  v.literal("family"),
+  v.literal("friend"),
+  v.literal("professional"),
+  v.literal("other"),
+);
+
+const responsibilityDomain = v.union(
+  v.literal("home"),
+  v.literal("family"),
+  v.literal("finance"),
+  v.literal("food"),
+  v.literal("health"),
+  v.literal("transport"),
+  v.literal("education"),
+  v.literal("admin"),
+  v.literal("pets"),
+  v.literal("work"),
+  v.literal("other"),
+);
+
+const responsibilityHealth = v.union(
+  v.literal("on_track"),
+  v.literal("attention"),
+  v.literal("blocked"),
+);
+
+const reviewCadence = v.union(
+  v.literal("none"),
+  v.literal("weekly"),
+  v.literal("monthly"),
+  v.literal("quarterly"),
+  v.literal("yearly"),
+);
+
+const domainTaskStatus = v.union(
+  v.literal("open"),
+  v.literal("in_progress"),
+  v.literal("waiting"),
+  v.literal("done"),
+);
+
+const taskPriority = v.union(
+  v.literal("low"),
+  v.literal("normal"),
+  v.literal("high"),
+  v.literal("urgent"),
+);
+
+const routineFrequency = v.union(
+  v.literal("daily"),
+  v.literal("weekly"),
+  v.literal("fortnightly"),
+  v.literal("monthly"),
+  v.literal("interval"),
+);
+
+const routinePhase = v.union(
+  v.literal("preparation"),
+  v.literal("occurrence"),
+  v.literal("follow_up"),
+);
+
+const serviceMode = v.union(
+  v.literal("dine_in"),
+  v.literal("takeaway"),
+  v.literal("delivery"),
+);
+
+const orderMethod = v.union(
+  v.literal("direct_phone"),
+  v.literal("direct_web"),
+  v.literal("delivery_app"),
+  v.literal("walk_in"),
+  v.literal("at_table"),
+  v.literal("other"),
+);
+
+const foodKind = v.union(
+  v.literal("meal"),
+  v.literal("takeaway_item"),
+  v.literal("snack"),
+  v.literal("drink"),
+  v.literal("ingredient"),
+);
+
+const preferenceCategory = v.union(
+  v.literal("meal"),
+  v.literal("takeaway"),
+  v.literal("snack"),
+  v.literal("activity"),
+  v.literal("drink"),
+  v.literal("restaurant"),
+  v.literal("ingredient"),
+);
+
+const preferenceSource = v.union(
+  v.literal("observed"),
+  v.literal("told_by_person"),
+  v.literal("household_knowledge"),
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -223,4 +330,194 @@ export default defineSchema({
     .index("by_household_id", ["householdId"])
     .index("by_linked_item_id", ["linkedItemId"])
     .index("by_responsibility_id", ["responsibilityId"]),
+
+  domainPeople: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    relationship: personRelationship,
+    birthDate: v.optional(v.string()),
+    visibility,
+    linkedUserId: v.optional(v.id("users")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_linked_user_id", ["linkedUserId"]),
+
+  responsibilityAreas: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    domain: responsibilityDomain,
+    status: responsibilityStatus,
+    health: responsibilityHealth,
+    ownerPersonId: v.optional(v.id("domainPeople")),
+    backupPersonId: v.optional(v.id("domainPeople")),
+    reviewCadence,
+    nextReviewAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_status", ["householdId", "status"]),
+
+  routineDefinitions: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    status: routineStatus,
+    responsibilityId: v.optional(v.id("responsibilityAreas")),
+    personId: v.optional(v.id("domainPeople")),
+    frequency: routineFrequency,
+    interval: v.number(),
+    weekdays: v.array(v.number()),
+    dayOfMonth: v.optional(v.number()),
+    timeLocal: v.optional(v.string()),
+    startsOn: v.string(),
+    alternating: v.boolean(),
+    nextOccurrenceAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_responsibility_id", ["responsibilityId"])
+    .index("by_person_id", ["personId"]),
+
+  routineVariants: defineTable({
+    householdId: v.id("households"),
+    routineId: v.id("routineDefinitions"),
+    name: v.string(),
+    sequencePosition: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_routine_id", ["routineId"]),
+
+  routineStepTemplates: defineTable({
+    householdId: v.id("households"),
+    routineId: v.id("routineDefinitions"),
+    variantId: v.optional(v.id("routineVariants")),
+    title: v.string(),
+    phase: routinePhase,
+    offsetDays: v.number(),
+    timeLocal: v.optional(v.string()),
+    assigneePersonId: v.optional(v.id("domainPeople")),
+    position: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_routine_id", ["routineId"])
+    .index("by_variant_id", ["variantId"]),
+
+  domainTasks: defineTable({
+    householdId: v.id("households"),
+    title: v.string(),
+    status: domainTaskStatus,
+    priority: taskPriority,
+    startAt: v.optional(v.number()),
+    dueAt: v.optional(v.number()),
+    estimatedMinutes: v.optional(v.number()),
+    responsibilityId: v.optional(v.id("responsibilityAreas")),
+    routineId: v.optional(v.id("routineDefinitions")),
+    routineStepId: v.optional(v.id("routineStepTemplates")),
+    concernsPersonId: v.optional(v.id("domainPeople")),
+    accountablePersonId: v.optional(v.id("domainPeople")),
+    assigneePersonId: v.optional(v.id("domainPeople")),
+    completedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_status", ["householdId", "status"])
+    .index("by_responsibility_id", ["responsibilityId"])
+    .index("by_routine_id", ["routineId"])
+    .index("by_concerns_person_id", ["concernsPersonId"]),
+
+  restaurants: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    cuisine: v.optional(v.string()),
+    serviceModes: v.array(serviceMode),
+    preferredOrderMethod: v.optional(orderMethod),
+    phone: v.optional(v.string()),
+    website: v.optional(v.string()),
+    addressLine: v.optional(v.string()),
+    postcode: v.optional(v.string()),
+    parkingGuidance: v.optional(v.string()),
+    bookingGuidance: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_household_id", ["householdId"]),
+
+  foodItems: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    kind: foodKind,
+    brand: v.optional(v.string()),
+    defaultPreparation: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_household_id_and_kind", ["householdId", "kind"]),
+
+  activities: defineTable({
+    householdId: v.id("households"),
+    name: v.string(),
+    venue: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_household_id", ["householdId"]),
+
+  personPreferences: defineTable({
+    householdId: v.id("households"),
+    personId: v.id("domainPeople"),
+    category: preferenceCategory,
+    relation: preferenceKind,
+    foodItemId: v.optional(v.id("foodItems")),
+    restaurantId: v.optional(v.id("restaurants")),
+    activityId: v.optional(v.id("activities")),
+    preparationPreference: v.optional(v.string()),
+    avoidFoodItemIds: v.array(v.id("foodItems")),
+    source: preferenceSource,
+    lastConfirmedAt: v.optional(v.number()),
+    visibility,
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_person_id", ["personId"])
+    .index("by_restaurant_id", ["restaurantId"])
+    .index("by_food_item_id", ["foodItemId"]),
+
+  restaurantOrderProfiles: defineTable({
+    householdId: v.id("households"),
+    restaurantId: v.id("restaurants"),
+    name: v.string(),
+    scope: v.union(v.literal("household"), v.literal("person")),
+    personId: v.optional(v.id("domainPeople")),
+    orderMethod: v.optional(orderMethod),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_id", ["householdId"])
+    .index("by_restaurant_id", ["restaurantId"])
+    .index("by_person_id", ["personId"]),
+
+  restaurantOrderLines: defineTable({
+    householdId: v.id("households"),
+    orderProfileId: v.id("restaurantOrderProfiles"),
+    quantity: v.number(),
+    itemName: v.string(),
+    variant: v.optional(v.string()),
+    modifications: v.array(v.string()),
+    forPersonIds: v.array(v.id("domainPeople")),
+    position: v.number(),
+    createdAt: v.number(),
+  }).index("by_order_profile_id", ["orderProfileId"]),
 });
