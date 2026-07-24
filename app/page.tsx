@@ -5,18 +5,18 @@ import { Brand } from "@/components/Brand";
 const principles = [
   {
     icon: CircleUserRound,
-    title: "Know the people",
-    body: "Preferences, needs and context that make thoughtful action possible.",
+    title: "Knowledge that can act",
+    body: "Typed household records retain the exact context, rules and outcomes that everyday work depends on.",
   },
   {
     icon: Link2,
-    title: "Share the understanding",
-    body: "One household record that both partners can build and use.",
+    title: "One connected household",
+    body: "Areas are places to look. Relationships let the same fact support tasks, emergencies, shopping and planning.",
   },
   {
     icon: ShieldCheck,
-    title: "Keep access intentional",
-    body: "Household membership and roles define who can see and change shared information.",
+    title: "Work that closes the loop",
+    body: "Cadence, thresholds and deadlines create contextual work whose sign-off updates the household record.",
   },
 ];
 
@@ -25,27 +25,32 @@ export default function HomePage() {
     <main className="landing-shell">
       <nav className="landing-nav">
         <Brand />
-        <Link className="text-link" href="/signin">
-          Sign in
-        </Link>
+        <div className="header-actions">
+          <Link className="text-link" href="/prototype">
+            Open prototype
+          </Link>
+          <Link className="text-link" href="/signin">
+            Sign in
+          </Link>
+        </div>
       </nav>
 
       <section className="hero-grid">
         <div className="hero-copy">
           <div className="eyebrow">
-            <Orbit size={16} /> Shared household context
+            <Orbit size={16} /> The household operating system
           </div>
-          <h1>The life you share, understood by both of you.</h1>
+          <h1>Home life, held together.</h1>
           <p className="hero-lead">
-            Ordia gives a household one place for the people, responsibilities and
-            context behind everyday life — so care does not depend on one person
-            remembering everything.
+            Ordia keeps the knowledge behind household life, knows when it matters,
+            and gives the right person enough context to act without asking someone
+            else to remember it for them.
           </p>
           <div className="hero-actions">
-            <Link className="primary-button" href="/signin?flow=signUp">
-              Create your household <ArrowRight size={18} />
+            <Link className="primary-button" href="/prototype">
+              Explore the new Ordia <ArrowRight size={18} />
             </Link>
-            <span className="supporting-copy">Private by default. Shared by invitation.</span>
+            <span className="supporting-copy">A functional prototype of the new household model.</span>
           </div>
         </div>
 
@@ -55,12 +60,12 @@ export default function HomePage() {
           <div className="orbit-ring orbit-three" />
           <div className="orbit-core">
             <span>Household</span>
-            <strong>Shared context</strong>
+            <strong>Living context</strong>
           </div>
-          <div className="orbit-node node-one">People</div>
-          <div className="orbit-node node-two">Ownership</div>
-          <div className="orbit-node node-three">Routines</div>
-          <div className="orbit-node node-four">Dates</div>
+          <div className="orbit-node node-one">Knowledge</div>
+          <div className="orbit-node node-two">Rules</div>
+          <div className="orbit-node node-three">Work</div>
+          <div className="orbit-node node-four">History</div>
         </div>
       </section>
 
