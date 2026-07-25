@@ -1,33 +1,18 @@
 name: Ordia CI
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-
-permissions:
-  contents: read
 
 jobs:
-  verify:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      NEXT_PUBLIC_CONVEX_URL: https://ordia-build-placeholder.convex.cloud
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Production build
-        run: npm run build
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
