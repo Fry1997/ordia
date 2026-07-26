@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"next dev\" \"convex dev\"",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
+    "build:frontend": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "convex:deploy": "convex deploy"
