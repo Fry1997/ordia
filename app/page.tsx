@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CalendarDays, Check, ChevronRight, Circle, Plus, ShoppingBasket, Sparkles, Users } from "lucide-react";
 
 const responsibilities = [
@@ -21,7 +22,7 @@ export default function Home() {
           <button className="rail-button active" aria-label="Today"><Sparkles size={20} /></button>
           <button className="rail-button" aria-label="Household"><Users size={20} /></button>
           <button className="rail-button" aria-label="Shopping"><ShoppingBasket size={20} /></button>
-          <button className="rail-button" aria-label="Calendar"><CalendarDays size={20} /></button>
+          <Link className="rail-button" aria-label="Itinerary" href="/itinerary"><CalendarDays size={20} /></Link>
         </nav>
         <div className="avatar">VF</div>
       </aside>
@@ -74,6 +75,7 @@ export default function Home() {
             <div className="today-item done"><span><Check size={16} /></span><div><strong>Nursery bag packed</strong><small>Completed by Connor</small></div></div>
             <div className="today-item"><span>11:30</span><div><strong>Rory swimming</strong><small>Wellingborough Leisure Centre</small></div></div>
             <div className="today-item"><span>17:30</span><div><strong>Dinner</strong><small>No meal chosen yet</small></div></div>
+            <Link className="quiet-add" href="/itinerary"><CalendarDays size={17} /> Open household itinerary</Link>
           </aside>
         </div>
 
