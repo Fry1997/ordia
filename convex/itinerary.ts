@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { requireHouseholdAdult, requireHouseholdMember } from "./lib/access";
@@ -141,7 +141,16 @@ function addInterval(from: number, amount: number, unit: "day" | "week" | "month
   return date.getTime();
 }
 
-async function validateItemArgs(ctx: MutationCtx, args: ItemArgs, itemId?: Id<"itineraryItems">) {
+function cleanText(value?: string) {
+  const text = value?.trim();
+  return text ? text : null;
+}
+
+async function validateItemArgs(
+  ctx: MutationCtx,
+  args: ItemArgs,
+  itemId?: Id<"itineraryItems">,
+) {
   await requireHouseholdAdult(ctx, args.householdId);
   if (args.title.trim().length < 2) throw new Error("Give the item a title");
   if (args.recurrenceInterval < 1) throw new Error("Repeat interval must be at least 1");
@@ -194,6 +203,66 @@ async function validateItemArgs(ctx: MutationCtx, args: ItemArgs, itemId?: Id<"i
   }
 }
 
+function buildItemDocument(
+  args: ItemArgs,
+  createdBy: Id<"users">,
+  active: boolean,
+  now: number,
+  existingNextDueAt?: number,
+): Omit<Doc<"itineraryItems">, "_id" | "_creationTime"> {
+  const details = cleanText(args.details);
+  const startDate = cleanText(args.startDate);
+  const rotationAnchorDate = cleanText(args.rotationAnchorDate);
+  const rotationLabels = args.rotationLabels.map((label) => label.trim()).filter(Boolean);
+  const nextDueAt =
+    args.scheduleType === "rolling" && args.rollingUnit && args.rollingInterval
+      ? args.nextDueAt ?? existingNextDueAt ?? addInterval(now, args.rollingInterval, args.rollingUnit)
+      : null;
+
+  return {
+    householdId: args.householdId,
+    title: args.title.trim(),
+    kind: args.kind,
+    completionMode: args.completionMode,
+    scheduleType: args.scheduleType,
+    active,
+    createdBy,
+    allDay: args.allDay,
+    recurrenceType: args.recurrenceType,
+    recurrenceInterval: args.recurrenceInterval,
+    recurrenceWeekdays: args.recurrenceWeekdays,
+    resetOnCompletion: args.resetOnCompletion,
+    rotationLabels,
+    updatedAt: now,
+    ...(details ? { details } : {}),
+    ...(args.locationId ? { locationId: args.locationId } : {}),
+    ...(args.scheduleType === "fixed" && startDate ? { startDate } : {}),
+    ...(args.scheduleType === "fixed" && args.startMinute !== undefined
+      ? { startMinute: args.startMinute }
+      : {}),
+    ...(args.scheduleType === "fixed" && args.endMinute !== undefined
+      ? { endMinute: args.endMinute }
+      : {}),
+    ...(args.scheduleType === "relative" && args.anchorItemId
+      ? { anchorItemId: args.anchorItemId }
+      : {}),
+    ...(args.scheduleType === "relative" && args.relativeDirection
+      ? { relativeDirection: args.relativeDirection }
+      : {}),
+    ...(args.scheduleType === "relative" && args.relativeOffsetMinutes !== undefined
+      ? { relativeOffsetMinutes: args.relativeOffsetMinutes }
+      : {}),
+    ...(args.scheduleType === "rolling" && args.rollingUnit
+      ? { rollingUnit: args.rollingUnit }
+      : {}),
+    ...(args.scheduleType === "rolling" && args.rollingInterval
+      ? { rollingInterval: args.rollingInterval }
+      : {}),
+    ...(nextDueAt ? { nextDueAt } : {}),
+    ...(rotationAnchorDate ? { rotationAnchorDate } : {}),
+  };
+}
+
 async function replaceChecklist(
   ctx: MutationCtx,
   householdId: Id<"households">,
@@ -212,14 +281,16 @@ async function replaceChecklist(
 
   const inserted: Id<"checklistItems">[] = [];
   for (const [index, row] of rows.entries()) {
+    const parentItemId =
+      row.parentIndex === undefined ? null : inserted[row.parentIndex] ?? null;
     const id = await ctx.db.insert("checklistItems", {
       householdId,
       itineraryItemId,
-      parentItemId: row.parentIndex === undefined ? undefined : inserted[row.parentIndex],
       label: row.label.trim(),
       requiredQuantity: row.requiredQuantity,
       sortOrder: index,
       active: true,
+      ...(parentItemId ? { parentItemId } : {}),
     });
     inserted.push(id);
   }
@@ -248,47 +319,52 @@ export const list = query({
             )
             .take(250),
         ]);
+
+        const locationValue = location
+          ? {
+              name: location.name,
+              ...(location.address ? { address: location.address } : {}),
+              ...(location.phone ? { phone: location.phone } : {}),
+              ...(location.contactLabel ? { contactLabel: location.contactLabel } : {}),
+            }
+          : null;
+
         return {
           _id: item._id,
           title: item.title,
-          details: item.details,
           kind: item.kind,
           completionMode: item.completionMode,
           scheduleType: item.scheduleType,
-          locationId: item.locationId,
-          location: location
-            ? {
-                name: location.name,
-                address: location.address,
-                phone: location.phone,
-                contactLabel: location.contactLabel,
-              }
-            : undefined,
           allDay: item.allDay,
-          startDate: item.startDate,
-          startMinute: item.startMinute,
-          endMinute: item.endMinute,
           recurrenceType: item.recurrenceType,
           recurrenceInterval: item.recurrenceInterval,
           recurrenceWeekdays: item.recurrenceWeekdays,
-          anchorItemId: item.anchorItemId,
-          relativeDirection: item.relativeDirection,
-          relativeOffsetMinutes: item.relativeOffsetMinutes,
-          rollingUnit: item.rollingUnit,
-          rollingInterval: item.rollingInterval,
-          nextDueAt: item.nextDueAt,
           resetOnCompletion: item.resetOnCompletion,
           rotationLabels: item.rotationLabels,
-          rotationAnchorDate: item.rotationAnchorDate,
           checklistItems: checklistItems
             .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map(({ _id, parentItemId, label, requiredQuantity, sortOrder }) => ({
-              _id,
-              parentItemId,
-              label,
-              requiredQuantity,
-              sortOrder,
+            .map((row) => ({
+              _id: row._id,
+              label: row.label,
+              requiredQuantity: row.requiredQuantity,
+              sortOrder: row.sortOrder,
+              ...(row.parentItemId ? { parentItemId: row.parentItemId } : {}),
             })),
+          ...(item.details ? { details: item.details } : {}),
+          ...(item.locationId ? { locationId: item.locationId } : {}),
+          ...(locationValue ? { location: locationValue } : {}),
+          ...(item.startDate ? { startDate: item.startDate } : {}),
+          ...(item.startMinute !== undefined ? { startMinute: item.startMinute } : {}),
+          ...(item.endMinute !== undefined ? { endMinute: item.endMinute } : {}),
+          ...(item.anchorItemId ? { anchorItemId: item.anchorItemId } : {}),
+          ...(item.relativeDirection ? { relativeDirection: item.relativeDirection } : {}),
+          ...(item.relativeOffsetMinutes !== undefined
+            ? { relativeOffsetMinutes: item.relativeOffsetMinutes }
+            : {}),
+          ...(item.rollingUnit ? { rollingUnit: item.rollingUnit } : {}),
+          ...(item.rollingInterval ? { rollingInterval: item.rollingInterval } : {}),
+          ...(item.nextDueAt ? { nextDueAt: item.nextDueAt } : {}),
+          ...(item.rotationAnchorDate ? { rotationAnchorDate: item.rotationAnchorDate } : {}),
         };
       }),
     );
@@ -302,40 +378,10 @@ export const create = mutation({
     await validateItemArgs(ctx, args);
     const userId = await requireHouseholdAdult(ctx, args.householdId);
     const now = Date.now();
-    const nextDueAt =
-      args.scheduleType === "rolling" && args.rollingUnit && args.rollingInterval
-        ? args.nextDueAt ?? addInterval(now, args.rollingInterval, args.rollingUnit)
-        : args.nextDueAt;
-
-    const itemId = await ctx.db.insert("itineraryItems", {
-      householdId: args.householdId,
-      title: args.title.trim(),
-      details: args.details?.trim() || undefined,
-      kind: args.kind,
-      completionMode: args.completionMode,
-      scheduleType: args.scheduleType,
-      active: true,
-      createdBy: userId,
-      locationId: args.locationId,
-      allDay: args.allDay,
-      startDate: args.startDate,
-      startMinute: args.startMinute,
-      endMinute: args.endMinute,
-      recurrenceType: args.recurrenceType,
-      recurrenceInterval: args.recurrenceInterval,
-      recurrenceWeekdays: args.recurrenceWeekdays,
-      anchorItemId: args.anchorItemId,
-      relativeDirection: args.relativeDirection,
-      relativeOffsetMinutes: args.relativeOffsetMinutes,
-      rollingUnit: args.rollingUnit,
-      rollingInterval: args.rollingInterval,
-      nextDueAt,
-      resetOnCompletion: args.resetOnCompletion,
-      rotationLabels: args.rotationLabels.map((label) => label.trim()).filter(Boolean),
-      rotationAnchorDate: args.rotationAnchorDate,
-      updatedAt: now,
-    });
-
+    const itemId = await ctx.db.insert(
+      "itineraryItems",
+      buildItemDocument(args, userId, true, now),
+    );
     await replaceChecklist(ctx, args.householdId, itemId, args.checklistItems);
     return itemId;
   },
@@ -350,31 +396,10 @@ export const update = mutation({
     if (item.householdId !== args.householdId) throw new Error("Household mismatch");
     await validateItemArgs(ctx, args, args.itemId);
 
-    await ctx.db.patch(args.itemId, {
-      title: args.title.trim(),
-      details: args.details?.trim() || undefined,
-      kind: args.kind,
-      completionMode: args.completionMode,
-      scheduleType: args.scheduleType,
-      locationId: args.locationId,
-      allDay: args.allDay,
-      startDate: args.startDate,
-      startMinute: args.startMinute,
-      endMinute: args.endMinute,
-      recurrenceType: args.recurrenceType,
-      recurrenceInterval: args.recurrenceInterval,
-      recurrenceWeekdays: args.recurrenceWeekdays,
-      anchorItemId: args.anchorItemId,
-      relativeDirection: args.relativeDirection,
-      relativeOffsetMinutes: args.relativeOffsetMinutes,
-      rollingUnit: args.rollingUnit,
-      rollingInterval: args.rollingInterval,
-      nextDueAt: args.nextDueAt,
-      resetOnCompletion: args.resetOnCompletion,
-      rotationLabels: args.rotationLabels.map((label) => label.trim()).filter(Boolean),
-      rotationAnchorDate: args.rotationAnchorDate,
-      updatedAt: Date.now(),
-    });
+    await ctx.db.replace(
+      args.itemId,
+      buildItemDocument(args, item.createdBy, true, Date.now(), item.nextDueAt),
+    );
     await replaceChecklist(ctx, args.householdId, args.itemId, args.checklistItems);
     return null;
   },
@@ -402,12 +427,13 @@ export const complete = mutation({
     if (item.completionMode === "none") throw new Error("This item does not need completing");
 
     const completedAt = Date.now();
+    const note = cleanText(args.note);
     await ctx.db.insert("itemCompletions", {
       householdId: item.householdId,
       itineraryItemId: item._id,
       completedBy: userId,
       completedAt,
-      note: args.note?.trim() || undefined,
+      ...(note ? { note } : {}),
     });
 
     if (
