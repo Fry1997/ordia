@@ -1,8 +1,9 @@
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
+import type { DataModel } from "./_generated/dataModel";
 
-const PasswordProvider = Password({
+const PasswordProvider = Password<DataModel>({
   profile(params) {
     const email = String(params.email ?? "").trim().toLowerCase();
     const name = String(params.name ?? "").trim();
