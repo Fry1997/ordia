@@ -15,6 +15,10 @@ export const me = query({
     if (!user) {
       throw new Error("Account not found");
     }
-    return { _id: user._id, name: user.name, email: user.email };
+    return {
+      _id: user._id,
+      ...(user.name ? { name: user.name } : {}),
+      ...(user.email ? { email: user.email } : {}),
+    };
   },
 });
