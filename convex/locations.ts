@@ -10,6 +10,11 @@ const locationFields = {
   notes: v.optional(v.string()),
 };
 
+function optionalText(value?: string) {
+  const text = value?.trim();
+  return text ? text : null;
+}
+
 export const list = query({
   args: { householdId: v.id("households") },
   returns: v.array(
@@ -30,13 +35,13 @@ export const list = query({
         q.eq("householdId", args.householdId).eq("archived", false),
       )
       .take(100);
-    return rows.map(({ _id, name, address, phone, contactLabel, notes }) => ({
-      _id,
-      name,
-      address,
-      phone,
-      contactLabel,
-      notes,
+    return rows.map((row) => ({
+      _id: row._id,
+      name: row.name,
+      ...(row.address ? { address: row.address } : {}),
+      ...(row.phone ? { phone: row.phone } : {}),
+      ...(row.contactLabel ? { contactLabel: row.contactLabel } : {}),
+      ...(row.notes ? { notes: row.notes } : {}),
     }));
   },
 });
@@ -48,16 +53,21 @@ export const create = mutation({
     const userId = await requireHouseholdAdult(ctx, args.householdId);
     const name = args.name.trim();
     if (!name) throw new Error("Give this place a name");
+    const address = optionalText(args.address);
+    const phone = optionalText(args.phone);
+    const contactLabel = optionalText(args.contactLabel);
+    const notes = optionalText(args.notes);
+
     return await ctx.db.insert("locations", {
       householdId: args.householdId,
       name,
-      address: args.address?.trim() || undefined,
-      phone: args.phone?.trim() || undefined,
-      contactLabel: args.contactLabel?.trim() || undefined,
-      notes: args.notes?.trim() || undefined,
       archived: false,
       createdBy: userId,
       updatedAt: Date.now(),
+      ...(address ? { address } : {}),
+      ...(phone ? { phone } : {}),
+      ...(contactLabel ? { contactLabel } : {}),
+      ...(notes ? { notes } : {}),
     });
   },
 });
@@ -71,13 +81,21 @@ export const update = mutation({
     await requireHouseholdAdult(ctx, location.householdId);
     const name = args.name.trim();
     if (!name) throw new Error("Give this place a name");
-    await ctx.db.patch(args.locationId, {
+    const address = optionalText(args.address);
+    const phone = optionalText(args.phone);
+    const contactLabel = optionalText(args.contactLabel);
+    const notes = optionalText(args.notes);
+
+    await ctx.db.replace(args.locationId, {
+      householdId: location.householdId,
       name,
-      address: args.address?.trim() || undefined,
-      phone: args.phone?.trim() || undefined,
-      contactLabel: args.contactLabel?.trim() || undefined,
-      notes: args.notes?.trim() || undefined,
+      archived: location.archived,
+      createdBy: location.createdBy,
       updatedAt: Date.now(),
+      ...(address ? { address } : {}),
+      ...(phone ? { phone } : {}),
+      ...(contactLabel ? { contactLabel } : {}),
+      ...(notes ? { notes } : {}),
     });
     return null;
   },
