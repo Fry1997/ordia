@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"next dev\" \"convex dev\"",
-    "build": "node scripts/build.mjs",
-    "build:frontend": "next build",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "convex:deploy": "convex deploy"
+    "convex:deploy": "convex deploy",
+    "deploy:production": "convex deploy --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL --cmd \"next build\""
   },
   "dependencies": {
     "@auth/core": "0.41.1",
