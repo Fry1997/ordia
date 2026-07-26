@@ -156,9 +156,9 @@ export const listMembers = query({
         const user = await ctx.db.get(membership.userId);
         return {
           userId: membership.userId,
-          name: user?.name,
-          email: user?.email,
           role: membership.role,
+          ...(user?.name ? { name: user.name } : {}),
+          ...(user?.email ? { email: user.email } : {}),
         };
       }),
     );
