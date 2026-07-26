@@ -1,9 +1,13 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 
 const taskArea = v.union(v.literal("home"), v.literal("family"), v.literal("health"), v.literal("money"), v.literal("meals"), v.literal("shopping"), v.literal("other"));
 
-async function requireMembership(ctx: Parameters<typeof listOpen.handler>[0], householdId: Parameters<typeof listOpen.handler>[1]["householdId"]) {
+type AppCtx = QueryCtx | MutationCtx;
+
+async function requireMembership(ctx: AppCtx, householdId: Id<"households">) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
 
